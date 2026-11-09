@@ -6,7 +6,7 @@ export interface AuthState { user: Me | null; loading: boolean; notice: string; 
 export const AuthContext = createContext<AuthState | null>(null);
 let restoration: Promise<Me | null> | undefined;
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Me | null>(null); const [loading, setLoading] = useState(true); const [notice, setNotice] = useState('');
+  const [user, setUser] = useState<Me | null>(null); const [loading, setLoading] = useState(true); const [notice, setNotice] = useState(() => { const warning = sessionStorage.getItem('lumon.logout-warning') ?? ''; sessionStorage.removeItem('lumon.logout-warning'); return warning; });
   const revision = useRef(0);
   const reload = useCallback(async () => { const id = ++revision.current; try { const me = await auth.me(); if (id === revision.current) setUser(me); } catch(e) { if (id === revision.current) setNotice(e instanceof Error ? e.message : 'No se pudo cargar el perfil.'); } }, []);
   useEffect(() => {
@@ -19,3 +19,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(values: Credentials, register: boolean) { const id = ++revision.current; const me = await auth.signIn(values, register); if (id === revision.current) { setUser(me); setNotice(''); } }
   return <AuthContext.Provider value={{user, loading, notice, signIn, reload}}>{loading ? <main role="status">Verificando tu sesión…</main> : children}</AuthContext.Provider>;
 }
+

@@ -1,3 +1,4 @@
+import { broadcastSession, listenSession, LOGOUT_KEY } from './crossTab';
 import { ApiError, http } from '../api/http';
 import type { Credentials, Tokens, Me } from '../types/auth';
 const KEY = 'lumon.refresh';
@@ -11,7 +12,7 @@ let reason = '';
 export const session = {
   subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   get reason() { return reason; },
-  clear(message = '') { version++; access = undefined; expiresAt = 0; currentRefresh = null; localStorage.removeItem(KEY); reason = message; listeners.forEach(fn => fn()); },
+  clear(message = '', notify = true) { if (notify) localStorage.setItem(LOGOUT_KEY, crypto.randomUUID()); version++; access = undefined; expiresAt = 0; currentRefresh = null; localStorage.removeItem(KEY); reason = message; listeners.forEach(fn => fn()); },
 };
 function store(tokens: Tokens) {
   if (typeof tokens.accessToken !== 'string' || typeof tokens.refreshToken !== 'string' || !Number.isFinite(tokens.expiresIn) || tokens.expiresIn <= 0) throw new ApiError(0, 'UNEXPECTED_RESPONSE', 'La sesión recibida no es válida.');
@@ -28,13 +29,13 @@ export async function refresh(failedToken?: string): Promise<string> {
     if (access && access !== failedToken && Date.now() < expiresAt) return access;
     const token = localStorage.getItem(KEY);
     if (!token) throw new ApiError(401, 'NO_SESSION', 'Inicia sesión para continuar.');
-    const generation = version;
+    const generation = version; const epoch = localStorage.getItem(LOGOUT_KEY);
     // Retire before sending: an ambiguous network failure must never reuse a consumed token.
     localStorage.removeItem(KEY);
     try {
       const result = await http<Tokens>('/auth/refresh', { method: 'POST', body: JSON.stringify({ refreshToken: token }) });
-      if (generation !== version) throw new ApiError(401, 'SESSION_CHANGED', 'La sesión cambió.');
-      store(result); return result.accessToken;
+      if (generation !== version || epoch !== localStorage.getItem(LOGOUT_KEY)) { await http<void>('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: result.refreshToken }) }); throw new ApiError(401, 'SESSION_CHANGED', 'La sesión cambió.'); }
+      store(result); broadcastSession({ type: 'rotated', accessToken: result.accessToken, refreshToken: result.refreshToken, expiresAt, epoch: localStorage.getItem(LOGOUT_KEY) }); return result.accessToken;
     } catch (error) { session.clear(error instanceof ApiError && error.code === 'REFRESH_REUSED' ? 'La sesión se revocó por reutilización del token. Inicia sesión nuevamente.' : 'No se pudo recuperar la sesión. Inicia sesión nuevamente.'); throw error; }
   });
   try { return await pending; } finally { pending = undefined; }
@@ -53,9 +54,20 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 function invalidate(error: unknown) { if (error instanceof ApiError && ['TOKEN_INVALID','SESSION_REVOKED','REFRESH_REUSED','TOKEN_EXPIRED'].includes(error.code)) session.clear('Tu sesión ya no es válida. Inicia sesión nuevamente.'); }
 export const auth = {
   async signIn(values: Credentials, register: boolean) {
-    await locked(async () => { const generation = version; const tokens = await http<Tokens>(register ? '/auth/register' : '/auth/login', { method: 'POST', body: JSON.stringify(values) }); if (version !== generation) throw new Error('La sesión cambió. Intenta nuevamente.'); store(tokens); });
+    await locked(async () => { const generation = version; const tokens = await http<Tokens>(register ? '/auth/register' : '/auth/login', { method: 'POST', body: JSON.stringify(values) }); if (version !== generation) throw new Error('La sesión cambió. Intenta nuevamente.'); store(tokens); broadcastSession({ type: 'rotated', accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresAt, epoch: localStorage.getItem(LOGOUT_KEY) }); });
     return request<Me>('/auth/me');
   },
   async restore() { if (!localStorage.getItem(KEY) && !access) return null; await refresh(); return request<Me>('/auth/me'); },
+  async logout() {
+    const token = localStorage.getItem(KEY) ?? currentRefresh;
+    localStorage.setItem(LOGOUT_KEY, crypto.randomUUID()); session.clear('Has cerrado sesión.');
+    if (token) await locked(() => http<void>('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: token }) }));
+  },
   async me() { return request<Me>('/auth/me'); },
 };
+
+listenSession(message => {
+  if (message.epoch !== localStorage.getItem(LOGOUT_KEY) || message.refreshToken !== localStorage.getItem(KEY) || typeof message.accessToken !== 'string' || !Number.isFinite(message.expiresAt)) return;
+  access = message.accessToken; currentRefresh = message.refreshToken; expiresAt = message.expiresAt;
+}, () => session.clear('La sesión se cerró desde otra pestaña.', false));
+
