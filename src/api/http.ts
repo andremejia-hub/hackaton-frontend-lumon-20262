@@ -32,7 +32,9 @@ export async function http<T>(
     response = await fetch(`${apiBase}${path}`, {
       ...options,
       headers,
-      signal: options.signal ?? AbortSignal.timeout(20000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(20000)])
+        : AbortSignal.timeout(20000),
     });
   } catch (error) {
     if (options.signal?.aborted) throw error;
@@ -45,6 +47,8 @@ export async function http<T>(
     );
   }
   if (response.status === 204) return undefined as T;
+  if (response.status >= 500 && path !== "/meta/health")
+    window.dispatchEvent(new Event("lumon:connection-lost"));
   let data: unknown;
   try {
     data = await response.json();
@@ -56,8 +60,6 @@ export async function http<T>(
     );
   }
   if (!response.ok) {
-    if (response.status >= 500 && path !== "/meta/health")
-      window.dispatchEvent(new Event("lumon:connection-lost"));
     const body = data as {
       error?: string;
       message?: string;
@@ -65,8 +67,10 @@ export async function http<T>(
     };
     throw new ApiError(
       response.status,
-      body?.error ?? "HTTP_ERROR",
-      body?.message ?? "No se pudo completar la solicitud.",
+      typeof body?.error === "string" ? body.error : "HTTP_ERROR",
+      typeof body?.message === "string"
+        ? body.message
+        : "No se pudo completar la solicitud.",
       body?.details,
     );
   }

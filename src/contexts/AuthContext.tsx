@@ -35,6 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setNotice(
           e instanceof Error ? e.message : "No se pudo cargar el perfil.",
         );
+    } finally {
+      if (id === revision.current) setLoading(false);
     }
   }, []);
   useEffect(() => {
@@ -59,6 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     const unsubscribe = session.subscribe((changed) => {
       if (changed) {
+        setUser(null);
+        setLoading(true);
         void reload();
         return;
       }

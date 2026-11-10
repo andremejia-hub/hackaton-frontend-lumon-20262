@@ -99,6 +99,93 @@ async function requests(page: Page, count = 4) {
     ).then((results) => results.map((r) => r.status));
   }, count);
 }
+
+test("login en otra pestaña actualiza una pestaña que estaba sin sesión", async ({
+  page,
+  context,
+}) => {
+  await backend(context);
+  await page.goto("/login");
+  const other = await context.newPage();
+  await login(other);
+  await expect(page.getByText("TEAM-TEST", { exact: true })).toBeVisible();
+});
+
+test("una respuesta 401 de la sesión anterior no elimina un login nuevo", async ({
+  page,
+  context,
+}) => {
+  await backend(context);
+  await login(page);
+  let release: () => void = () => {};
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let held = false;
+  await context.route("**/auth/me", async (route) => {
+    if (!held) {
+      held = true;
+      await wait;
+      return route.fulfill({
+        status: 401,
+        json: { error: "SESSION_REVOKED", message: "Sesión anterior revocada" },
+      });
+    }
+    return route.fulfill({ json: me });
+  });
+  const old = requests(page, 1);
+  await expect.poll(() => held).toBe(true);
+  await page.evaluate(async () => {
+    const path = "/src/services/auth.ts";
+    const { auth } = (await import(
+      path
+    )) as typeof import("../src/services/auth");
+    await auth.signIn(
+      { email: "user@example.test", password: "password123" },
+      false,
+    );
+  });
+  release();
+  await old;
+  expect(await page.evaluate(() => localStorage.getItem("lumon.refresh"))).toBe(
+    "rt_0",
+  );
+  expect(await requests(page, 1)).toEqual(["fulfilled"]);
+});
+
+test("el health periódico no interrumpe un login pendiente", async ({
+  page,
+  context,
+}) => {
+  await backend(context);
+  let release: () => void = () => {};
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let held = false;
+  await context.route("**/auth/login", async (route) => {
+    held = true;
+    await wait;
+    return route.fulfill({
+      json: {
+        accessToken: "at_0",
+        refreshToken: "rt_0",
+        expiresIn: 180,
+        user: me,
+      },
+    });
+  });
+  await page.clock.install();
+  await page.goto("/login");
+  await page.clock.fastForward(21000);
+  await page.getByLabel("Correo electrónico").fill("user@example.test");
+  await page.getByLabel("Contraseña", { exact: true }).fill("password123");
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await expect.poll(() => held).toBe(true);
+  await page.clock.fastForward(10000);
+  release();
+  await expect(page.getByText("TEAM-TEST", { exact: true })).toBeVisible();
+});
 test("login conserva ruta, query y hash; permisos personalizados, 403 y 404", async ({
   page,
   context,

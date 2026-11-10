@@ -1,5 +1,5 @@
 /* Praise Kier */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ApiError, http } from "../api/http";
 export function ConnectionGate({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
@@ -7,6 +7,7 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
   const [retry, setRetry] = useState(0);
   const [message, setMessage] = useState("");
   const [ready, setReady] = useState(false);
+  const recovering = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -25,11 +26,14 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
         setReady(true);
         failures = 0;
         setMessage("");
-        window.dispatchEvent(new Event("lumon:connected"));
+        if (recovering.current)
+          window.dispatchEvent(new Event("lumon:connected"));
+        recovering.current = false;
         timer = setTimeout(check, 30000);
       } catch (e) {
         if (!active) return;
         setConnected(false);
+        recovering.current = true;
         setMessage(
           e instanceof ApiError ? e.message : "El servicio tarda en responder.",
         );
@@ -42,10 +46,12 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
     }
     void check();
     const offline = () => {
+      recovering.current = true;
       setConnected(false);
     };
     window.addEventListener("offline", offline);
     const reconnect = () => {
+      recovering.current = true;
       setConnected(false);
       setRetry((n) => n + 1);
     };

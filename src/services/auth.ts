@@ -12,6 +12,7 @@ const RETIRED = "lumon.refresh.retired";
 let access: string | undefined;
 let expiresAt = 0;
 let currentRefresh: string | null = null;
+let memoryEpoch: string | null = null;
 let pending: Promise<string> | undefined;
 let version = 0;
 const listeners = new Set<(changed?: boolean) => void>();
@@ -26,23 +27,34 @@ export const session = {
   get reason() {
     return reason;
   },
-  clear(message = "", notify = true) {
-    if (notify) localStorage.setItem(LOGOUT_KEY, crypto.randomUUID());
+  clear(
+    message = "",
+    notify = true,
+    expectedEpoch = localStorage.getItem(LOGOUT_KEY),
+  ) {
+    if (expectedEpoch !== localStorage.getItem(LOGOUT_KEY)) return;
+    if (notify) {
+      localStorage.removeItem(KEY);
+      localStorage.removeItem(RETIRED);
+      localStorage.setItem(LOGOUT_KEY, crypto.randomUUID());
+    }
     version++;
     access = undefined;
     expiresAt = 0;
     currentRefresh = null;
-    localStorage.removeItem(KEY);
-    localStorage.removeItem(RETIRED);
+    memoryEpoch = localStorage.getItem(LOGOUT_KEY);
     reason = message;
     listeners.forEach((fn) => fn());
   },
 };
 function store(tokens: Tokens) {
   if (
+    !tokens ||
     typeof tokens.accessToken !== "string" ||
+    !tokens.accessToken ||
     typeof tokens.refreshToken !== "string" ||
-    !Number.isFinite(tokens.expiresIn) ||
+    !tokens.refreshToken ||
+    !Number.isInteger(tokens.expiresIn) ||
     tokens.expiresIn <= 0
   )
     throw new ApiError(
@@ -56,6 +68,15 @@ function store(tokens: Tokens) {
   access = tokens.accessToken;
   expiresAt = Date.now() + tokens.expiresIn * 1000;
   reason = "";
+  memoryEpoch = localStorage.getItem(LOGOUT_KEY);
+}
+function syncEpoch() {
+  if (memoryEpoch === localStorage.getItem(LOGOUT_KEY)) return false;
+  access = undefined;
+  expiresAt = 0;
+  currentRefresh = null;
+  memoryEpoch = localStorage.getItem(LOGOUT_KEY);
+  return true;
 }
 async function locked<T>(callback: () => Promise<T>): Promise<T> {
   if (!navigator.locks)
@@ -67,9 +88,11 @@ async function locked<T>(callback: () => Promise<T>): Promise<T> {
   return navigator.locks.request("lumon.session", callback);
 }
 export async function refresh(failedToken?: string): Promise<string> {
+  syncEpoch();
   if (access && access !== failedToken && Date.now() < expiresAt) return access;
   if (pending) return pending;
   pending = locked(async () => {
+    syncEpoch();
     if (localStorage.getItem(KEY) !== currentRefresh)
       await requestPeerSession();
     if (access && access !== failedToken && Date.now() < expiresAt)
@@ -116,6 +139,8 @@ export async function refresh(failedToken?: string): Promise<string> {
         error instanceof ApiError && error.code === "REFRESH_REUSED"
           ? "La sesión se revocó por reutilización del token. Inicia sesión nuevamente."
           : "No se pudo recuperar la sesión. Inicia sesión nuevamente.",
+        true,
+        epoch,
       );
       throw error;
     }
@@ -131,11 +156,24 @@ export async function request<T>(
   options: RequestInit = {},
 ): Promise<T> {
   options.signal?.throwIfAborted();
+  syncEpoch();
   const token =
     access && Date.now() < expiresAt ? access : await refresh(access);
+  const requestEpoch = memoryEpoch;
+  const ensureCurrent = () => {
+    if (requestEpoch !== localStorage.getItem(LOGOUT_KEY))
+      throw new ApiError(
+        401,
+        "SESSION_CHANGED",
+        "La sesión cambió. Intenta nuevamente.",
+      );
+  };
   try {
-    return await http<T>(path, options, token);
+    const data = await http<T>(path, options, token);
+    ensureCurrent();
+    return data;
   } catch (error) {
+    ensureCurrent();
     if (
       error instanceof ApiError &&
       error.status === 401 &&
@@ -144,17 +182,19 @@ export async function request<T>(
       const next = await refresh(token);
       options.signal?.throwIfAborted();
       try {
-        return await http<T>(path, options, next);
+        const data = await http<T>(path, options, next);
+        ensureCurrent();
+        return data;
       } catch (retryError) {
-        invalidate(retryError);
+        invalidate(retryError, requestEpoch);
         throw retryError;
       }
     }
-    invalidate(error);
+    invalidate(error, requestEpoch);
     throw error;
   }
 }
-function invalidate(error: unknown) {
+function invalidate(error: unknown, requestEpoch: string | null) {
   if (
     error instanceof ApiError &&
     [
@@ -164,18 +204,32 @@ function invalidate(error: unknown) {
       "TOKEN_EXPIRED",
     ].includes(error.code)
   )
-    session.clear("Tu sesión ya no es válida. Inicia sesión nuevamente.");
+    session.clear(
+      "Tu sesión ya no es válida. Inicia sesión nuevamente.",
+      true,
+      requestEpoch,
+    );
 }
 export const auth = {
   async signIn(values: Credentials, register: boolean) {
     await locked(async () => {
       const generation = version;
+      const operationEpoch = localStorage.getItem(LOGOUT_KEY);
       const tokens = await http<Tokens>(
         register ? "/auth/register" : "/auth/login",
         { method: "POST", body: JSON.stringify(values) },
       );
-      if (version !== generation)
+      if (
+        version !== generation ||
+        operationEpoch !== localStorage.getItem(LOGOUT_KEY)
+      ) {
+        await http<void>("/auth/logout", {
+          method: "POST",
+          body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+        });
         throw new Error("La sesión cambió. Intenta nuevamente.");
+      }
+      localStorage.setItem(LOGOUT_KEY, crypto.randomUUID());
       store(tokens);
       broadcastSession({
         type: "rotated",
@@ -188,6 +242,7 @@ export const auth = {
     return parseMe(await request<unknown>("/auth/me"));
   },
   async restore() {
+    syncEpoch();
     if (!localStorage.getItem(KEY) && !access) return null;
     await refresh();
     return parseMe(await request<unknown>("/auth/me"));
@@ -195,8 +250,13 @@ export const auth = {
   async logout() {
     const stored = localStorage.getItem(KEY);
     const token = stored !== localStorage.getItem(RETIRED) ? stored : null;
-    localStorage.setItem(LOGOUT_KEY, crypto.randomUUID());
     session.clear("Has cerrado sesión.");
+    if (stored && !token)
+      throw new ApiError(
+        0,
+        "LOGOUT_UNCONFIRMED",
+        "La renovación estaba en curso; no se ha confirmado la revocación remota.",
+      );
     if (token)
       await locked(() =>
         http<void>("/auth/logout", {
@@ -216,19 +276,29 @@ listenSession(
       message.epoch !== localStorage.getItem(LOGOUT_KEY) ||
       message.refreshToken !== localStorage.getItem(KEY) ||
       typeof message.accessToken !== "string" ||
-      !Number.isFinite(message.expiresAt)
+      !message.accessToken ||
+      !Number.isFinite(message.expiresAt) ||
+      message.expiresAt <= Date.now()
     )
       return;
-    const changed =
-      currentRefresh !== null && currentRefresh !== message.refreshToken;
+    const changed = memoryEpoch !== message.epoch || currentRefresh === null;
     access = message.accessToken;
     currentRefresh = message.refreshToken;
     expiresAt = message.expiresAt;
+    memoryEpoch = message.epoch;
     if (changed) listeners.forEach((fn) => fn(true));
   },
-  () => session.clear("La sesión se cerró desde otra pestaña.", false),
+  () => {
+    if (!syncEpoch()) return;
+    if (localStorage.getItem(KEY)) listeners.forEach((fn) => fn(true));
+    else session.clear("La sesión se cerró desde otra pestaña.", false);
+  },
   () =>
-    access && currentRefresh && Date.now() < expiresAt
+    access &&
+    currentRefresh &&
+    currentRefresh === localStorage.getItem(KEY) &&
+    memoryEpoch === localStorage.getItem(LOGOUT_KEY) &&
+    Date.now() < expiresAt
       ? {
           type: "rotated",
           accessToken: access,
