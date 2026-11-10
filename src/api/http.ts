@@ -25,7 +25,7 @@ export async function http<T>(
       "Configura VITE_API_BASE_URL en .env.",
     );
   const headers = new Headers(options.headers);
-  headers.set("X-Lumon-Build", "latest");
+  headers.set("X-Lumon-Build", __BUILD__);
   if (options.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   let response: Response;
