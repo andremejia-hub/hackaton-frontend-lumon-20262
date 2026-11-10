@@ -60,7 +60,7 @@ Las pruebas E2E usan Microsoft Edge instalado y un servidor Vite dedicado. Si Ed
 
 `tests/auth.spec.ts` intercepta Fetch para reproducir el contrato sin crear cuentas. Prueba registro, errores duplicados, login, restauración, rutas con query/hash, permisos personalizados, 404, ocho requests simultáneas, dos pestañas, revocación, logout antes de 2 s, caída de red, límite de reintentos, recarga simultánea, vista móvil, `expiresIn`, ausencia de Web Locks y token retirado tras cerrar una pestaña. No constituye una verificación de credenciales reales del backend.
 
-Resultado de validación: 19 pruebas de navegador y 2 unitarias aprobadas; TypeScript estricto (incluye tests), build de producción y comprobación de formato aprobados. También se comprueban el backoff automático, permisos de administración con rol personalizado y el aviso de logout sin confirmación remota. Bundle inicial de JavaScript: aproximadamente 89 KB gzip.
+Resultado de la auditoría: 22 pruebas de navegador y 5 unitarias aprobadas; TypeScript estricto (incluye tests), build de producción y comprobación de formato aprobados. También se comprueban respuestas tardías de sesiones anteriores, login en una pestaña que estaba sin sesión y el sondeo de salud durante login. Bundle inicial de JavaScript: aproximadamente 89 KB gzip. Estado real de producción y limitaciones en [DEPLOYMENT.md](DEPLOYMENT.md).
 
 Archivos originales modificados: `.gitignore` (conserva las exclusiones originales y agrega IDE, pruebas y artefactos de TypeScript) y `README.md` (enlace a esta guía). Se conservaron los demás archivos originales. Archivos nuevos: `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `playwright.config.ts`, `index.html`, `.env.example`, esta guía, `tests/auth.spec.ts` y todo el árbol `src/` descrito arriba, incluidos `main.tsx`, `types/auth.ts`, `styles/index.css`, `utils/parseMe.ts`, `utils/validation.test.ts` y `vite-env.d.ts`. `.env` contiene solo las URLs públicas y está excluido de Git.
 
@@ -68,7 +68,7 @@ Archivos originales modificados: `.gitignore` (conserva las exclusiones original
 
 Contrato consultado: https://lumon-api.vercel.app/docs y su `/openapi.json`. El health real respondió 200 durante la implementación. No se crearon cuentas ni se enviaron credenciales de prueba a la API real.
 
-1. Con autorización del equipo, registra una única cuadrilla desde `/register`. Verifica errores de datos inválidos y, en intentos posteriores autorizados, duplicados de correo/nombre. Confirma TEAM_CODE y acceso automático al panel.
+1. TEAM-028 ya existe: inicia sesión con su cuenta autorizada; no vuelvas a registrar la cuadrilla. El registro y sus errores se comprueban con las pruebas automatizadas sin crear equipos reales.
 2. Cierra sesión; inicia sesión con esa cuenta desde `/team?view=details#access`. Confirma que conserva exactamente la URL. Una cuenta sin `team:manage` debe ver “Sin permiso”; no cambies el rol en frontend para simular permisos.
 3. Recarga el panel. En Network debe aparecer refresh y luego `/auth/me`; no debe mostrarse el login durante la comprobación. En Application no debe existir ningún access token persistido.
 4. Abre una segunda pestaña y espera el vencimiento real. Usa el panel y recarga ambas pestañas. Inspecciona Network: los refresh deben consumir tokens distintos, sin `REFRESH_REUSED`. No copies tokens a reportes ni capturas.
@@ -76,4 +76,4 @@ Contrato consultado: https://lumon-api.vercel.app/docs y su `/openapi.json`. El 
 6. En DevTools activa Offline, espera la pantalla de conexión, vuelve a Online y comprueba recuperación. Repite con el backend inaccesible; el health debe respetar el backoff.
 7. Abre una URL inexistente para comprobar 404. Comprueba formularios en móvil y navegación por teclado.
 
-La validación real de login, registro, logout y revocación requiere una cuenta autorizada. No se ha desplegado ni hecho push. En producción se requiere configurar el fallback de SPA para rutas profundas y verificar el origen según el contrato del curso. Ejecuta el build después del commit que se desplegará para que la cabecera coincida con su SHA.
+La validación real de login, logout y revocación requiere la cuenta existente autorizada. El código está publicado en GitHub y Vercel. Los rewrites SPA y cabeceras están configurados; la verificación del origen en Lumon sigue pendiente. Consulta [DEPLOYMENT.md](DEPLOYMENT.md). Ejecuta el build después del commit que se desplegará para que la cabecera coincida con su SHA.

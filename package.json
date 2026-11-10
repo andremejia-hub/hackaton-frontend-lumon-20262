@@ -13,8 +13,9 @@
     "test": "vitest run src build",
     "test:e2e": "playwright test",
     "preview": "vite preview",
-    "format": "prettier --write src tests build vite.config.ts playwright.config.ts tsconfig.json package.json index.html vercel.json",
-    "format:check": "prettier --check src tests build vite.config.ts playwright.config.ts tsconfig.json package.json index.html vercel.json"
+    "format": "prettier --write src tests build scripts vite.config.ts playwright.config.ts tsconfig.json package.json index.html vercel.json hackathon.json",
+    "format:check": "prettier --check src tests build scripts vite.config.ts playwright.config.ts tsconfig.json package.json index.html vercel.json hackathon.json",
+    "verify:production": "node scripts/verify-production.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

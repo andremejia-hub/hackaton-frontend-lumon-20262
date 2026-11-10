@@ -12,4 +12,3 @@ test-results/
 .wrangler/
 *.log
 .DS_Store
-
