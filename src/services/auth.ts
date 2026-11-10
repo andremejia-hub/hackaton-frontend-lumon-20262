@@ -210,6 +210,9 @@ function invalidate(error: unknown, requestEpoch: string | null) {
       requestEpoch,
     );
 }
+export function getAccessToken() {
+  return access;
+}
 export const auth = {
   async signIn(values: Credentials, register: boolean) {
     await locked(async () => {

@@ -34,6 +34,15 @@ export function DashboardPage() {
       <Link className="mt-4 inline-block underline" to="/files">
         Abrir archivos de datos
       </Link>
+      <Link className="mt-4 ml-4 inline-block underline" to="/refiners">
+        Expedientes
+      </Link>
+      <Link className="mt-4 ml-4 inline-block underline" to="/incidents">
+        Incidencias
+      </Link>
+      <Link className="mt-4 ml-4 inline-block underline" to="/estado">
+        Estado del sistema
+      </Link>
       {canManage ? (
         <Link className="mt-6 inline-block underline" to="/team">
           Consultar acceso de administración

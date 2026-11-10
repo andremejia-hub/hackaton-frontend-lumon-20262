@@ -1,10 +1,16 @@
 /* Praise Kier */
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AuthPage } from "./pages/AuthPage";
 const FilesPage = lazy(() => import("./pages/FilesPage"));
 const RefinePage = lazy(() => import("./pages/RefinePage"));
+const StatusPage = lazy(() => import("./pages/StatusPage"));
+const RefinersPage = lazy(() => import("./pages/RefinersPage"));
+const BadgePage = lazy(() => import("./pages/BadgePage"));
+const RefinerEditPage = lazy(() => import("./pages/RefinerEditPage"));
+const IncidentNewPage = lazy(() => import("./pages/IncidentNewPage"));
+const IncidentsPage = lazy(() => import("./pages/IncidentsPage"));
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { useAuth } from "./hooks/useAuth";
 export function App() {
@@ -52,6 +58,54 @@ export function App() {
           element={
             <Suspense fallback={<p>Cargando…</p>}>
               <RefinePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/estado"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <StatusPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/refiners"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <RefinersPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/refiners/:id/badge"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <BadgePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/refiners/:id/edit"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <RefinerEditPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/incidents"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <IncidentsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/incidents/new"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <IncidentNewPage />
             </Suspense>
           }
         />
