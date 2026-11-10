@@ -2,6 +2,19 @@
   "teamCode": "TEAM-028",
   "teamName": "Codigo200caleta",
   "deployUrl": "https://hackaton-frontend-lumon-20262-beige.vercel.app",
-  "storageProvider": null,
-  "integrantes": []
+  "storageProvider": "SUPABASE",
+  "integrantes": [
+    {
+      "nombre": "André Mejía",
+      "codigo": "202520185"
+    },
+    {
+      "nombre": "Miguel Dominguez",
+      "codigo": "202520038"
+    },
+    {
+      "nombre": "Miguel Angel Dominguez",
+      "codigo": "202520039"
+    }
+  ]
 }
