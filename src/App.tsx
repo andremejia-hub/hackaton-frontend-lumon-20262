@@ -1,7 +1,10 @@
 /* Praise Kier */
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AuthPage } from "./pages/AuthPage";
+const FilesPage = lazy(() => import("./pages/FilesPage"));
+const RefinePage = lazy(() => import("./pages/RefinePage"));
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { useAuth } from "./hooks/useAuth";
 export function App() {
@@ -36,13 +39,29 @@ export function App() {
       />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route
+          path="/files"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <FilesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/files/:id/refine"
+          element={
+            <Suspense fallback={<p>Cargando…</p>}>
+              <RefinePage />
+            </Suspense>
+          }
+        />
       </Route>
       <Route element={<ProtectedRoute permission="team:manage" />}>
         <Route
           path="/team"
           element={
             <main>
-              <h1>Acceso de administración autorizado</h1>
+              <h1 className="text-4xl">Acceso de administración autorizado</h1>
               <p>Tu cuenta tiene el permiso team:manage.</p>
               <Link to="/">Volver</Link>
             </main>

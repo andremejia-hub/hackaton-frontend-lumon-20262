@@ -31,6 +31,9 @@ export function DashboardPage() {
           ))}
         </ul>
       </section>
+      <Link className="mt-4 inline-block underline" to="/files">
+        Abrir archivos de datos
+      </Link>
       {canManage ? (
         <Link className="mt-6 inline-block underline" to="/team">
           Consultar acceso de administración

@@ -202,7 +202,7 @@ test("login conserva ruta, query y hash; permisos personalizados, 403 y 404", as
   ).toBeVisible();
   await page.goto("/unknown");
   await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
-  expect(state.headers.every((h) => h === "dev")).toBeTruthy();
+  expect(state.headers.every((h) => h === "latest")).toBeTruthy();
 });
 test("registro valida y muestra duplicados; sesión automática y restauración", async ({
   page,

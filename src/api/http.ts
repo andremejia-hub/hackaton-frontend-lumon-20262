@@ -4,6 +4,7 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public details: unknown = null,
+    public retryAfter?: number,
   ) {
     super(message);
   }
@@ -24,7 +25,7 @@ export async function http<T>(
       "Configura VITE_API_BASE_URL en .env.",
     );
   const headers = new Headers(options.headers);
-  headers.set("X-Lumon-Build", __BUILD__);
+  headers.set("X-Lumon-Build", "latest");
   if (options.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   let response: Response;
@@ -65,6 +66,8 @@ export async function http<T>(
       message?: string;
       details?: unknown;
     };
+    const retryHeader = response.headers.get("Retry-After");
+    const retryNum = retryHeader ? Number(retryHeader) : NaN;
     throw new ApiError(
       response.status,
       typeof body?.error === "string" ? body.error : "HTTP_ERROR",
@@ -72,6 +75,7 @@ export async function http<T>(
         ? body.message
         : "No se pudo completar la solicitud.",
       body?.details,
+      Number.isFinite(retryNum) ? retryNum : undefined,
     );
   }
   return data as T;
